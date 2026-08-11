@@ -1,0 +1,12 @@
+# Go
+gateway/bin/
+gateway/*.exe
+*.test
+
+# Arduino / Wokwi
+firmware/**/build/
+*.hex
+
+# Éditeurs
+.vscode/
+.idea/
