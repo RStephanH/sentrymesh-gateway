@@ -7,6 +7,9 @@ gateway/*.exe
 firmware/**/build/
 *.hex
 
-# Éditeurs
+# Editor
 .vscode/
 .idea/
+# Python (attacker)
+attacker/.venv/
+attacker/__pycache__/
