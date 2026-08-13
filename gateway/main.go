@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -37,6 +38,12 @@ func main() {
 	opsLimiter := NewSlidingWindowLimiter(rateWindow, rateMaxMessage)
 	floodDetector := NewSlidingWindowLimiter(floodWindow, floodMaxMessages)
 
+	store, err := NewStore("sentrymesh.db")
+	if err != nil {
+		logger.Fatal("fatal to open store", "error", err)
+	}
+	defer store.Close()
+
 	opts := mqtt.NewClientOptions().
 		AddBroker(brokerAddr).
 		SetClientID(ClientID)
@@ -60,6 +67,9 @@ func main() {
 		if err := validator.Validate(t); err != nil {
 			logger.Warn("telemetry rejected: invalid payload",
 				"device_id", t.DeviceID, "error", err)
+			if saveErr := store.SaveAlert(t.DeviceID, "invalid_payload", err.Error()); saveErr != nil {
+				logger.Error("failed to save alert", "error", err)
+			}
 			return
 		}
 
@@ -69,11 +79,18 @@ func main() {
 				"device_id", t.DeviceID,
 				"timestamp", t.Timestamp,
 			)
+			if saveErr := store.SaveAlert(t.DeviceID, "replay",
+				fmt.Sprintf("timestamp=%d", t.Timestamp)); saveErr != nil {
+				logger.Error("failed to save alert", "err", saveErr)
+			}
 			return
 		}
 
 		if allowed, floodDetected := checkRateLimits(opsLimiter, floodDetector, t.DeviceID); !allowed {
 			logger.Warn("telemetry rejected: rate limit exceeded", "device_id", t.DeviceID)
+			if saveErr := store.SaveAlert(t.DeviceID, "rate_limit", ""); saveErr != nil {
+				logger.Error("failed to save alert", "err", saveErr)
+			}
 			if floodDetected {
 				logger.Error(
 					"FLOOD ATTACK DETECTED",
@@ -81,6 +98,10 @@ func main() {
 					"window", floodWindow,
 					"threshold", floodMaxMessages,
 				)
+				if saveErr := store.SaveAlert(t.DeviceID, "flood",
+					fmt.Sprintf("window=%s threshold=%d", floodWindow, floodMaxMessages)); saveErr != nil {
+					logger.Error("failed to save alert", "err", saveErr)
+				}
 			}
 			return
 		}
@@ -92,6 +113,9 @@ func main() {
 			"temperature", t.Temperature,
 			"humidity", t.Humidity,
 		)
+		if saveErr := store.SaveTelemetry(t); saveErr != nil {
+			logger.Error("failed to save telemetry", "err", saveErr)
+		}
 	}
 
 	if token := client.Subscribe(topic, 1, handler); token.Wait() && token.Error() != nil {
