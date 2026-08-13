@@ -25,12 +25,16 @@ const (
 	ClientID       = "sentrymesh-gateway"
 	rateWindow     = 5 * time.Second
 	rateMaxMessage = 3
+
+	floodWindow      = 5 * time.Second
+	floodMaxMessages = 10
 )
 
 func main() {
 	logger := log.New(os.Stderr)
 	validator := NewRangeValidator()
-	limiter := NewSlidingWindowLimiter(rateWindow, rateMaxMessage)
+	opsLimiter := NewSlidingWindowLimiter(rateWindow, rateMaxMessage)
+	floodDetector := NewSlidingWindowLimiter(floodWindow, floodMaxMessages)
 
 	opts := mqtt.NewClientOptions().
 		AddBroker(brokerAddr).
@@ -58,9 +62,16 @@ func main() {
 			return
 		}
 
-		if !limiter.Allow(t.DeviceID) {
-			logger.Warn("telemetry rejected: rate limit exceeded",
-				"device_id", t.DeviceID)
+		if allowed, floodDetected := checkRateLimits(opsLimiter, floodDetector, t.DeviceID); !allowed {
+			logger.Warn("telemetry rejected: rate limit exceeded", "device_id", t.DeviceID)
+			if floodDetected {
+				logger.Error(
+					"FLOOD ATTACK DETECTED",
+					"device_id", t.DeviceID,
+					"window", floodWindow,
+					"threshold", floodMaxMessages,
+				)
+			}
 			return
 		}
 

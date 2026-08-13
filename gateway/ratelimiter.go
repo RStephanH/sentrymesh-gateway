@@ -51,3 +51,21 @@ func (l *SlidingWindowLimiter) Allow(deviceID string) bool {
 	l.history[deviceID] = append(kept, now)
 	return true
 }
+
+// checkRateLimits evaluates a device's message against both the operational
+// rate limiter and the flood detector. The flood detector always sees the
+// message (to reflect true throughput), regardless of the ops limiter's
+// decision — see main.go for why this order matters.
+//
+// allowed reports whether normal processing should continue.
+// floodDetected reports whether the message also breached the (more
+// permissive) flood threshold — a distinct, higher-severity signal.
+func checkRateLimits(ops, flood RateLimiter, deviceID string) (allowed, floodDetected bool) {
+	floodOK := flood.Allow(deviceID)
+	opsOK := ops.Allow(deviceID)
+
+	if !opsOK {
+		return false, !floodOK
+	}
+	return true, false
+}
