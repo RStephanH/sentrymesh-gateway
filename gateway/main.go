@@ -33,6 +33,7 @@ const (
 func main() {
 	logger := log.New(os.Stderr)
 	validator := NewRangeValidator()
+	replayDetector := NewReplayDetector()
 	opsLimiter := NewSlidingWindowLimiter(rateWindow, rateMaxMessage)
 	floodDetector := NewSlidingWindowLimiter(floodWindow, floodMaxMessages)
 
@@ -59,6 +60,15 @@ func main() {
 		if err := validator.Validate(t); err != nil {
 			logger.Warn("telemetry rejected: invalid payload",
 				"device_id", t.DeviceID, "error", err)
+			return
+		}
+
+		if !replayDetector.Check(t.DeviceID, t.Timestamp) {
+			logger.Error(
+				"REPLAY ATTACK DETECTED",
+				"device_id", t.DeviceID,
+				"timestamp", t.Timestamp,
+			)
 			return
 		}
 
