@@ -1,7 +1,9 @@
-package main
+package storage
 
 import (
 	"testing"
+
+	"github.com/RStephanH/sentrymesh-gateway/internal/telemetry"
 )
 
 func newTestStore(t *testing.T) *Store {
@@ -20,7 +22,7 @@ func newTestStore(t *testing.T) *Store {
 func TestStore_SaveTelemetry(t *testing.T) {
 	store := newTestStore(t)
 
-	tel := Telemetry{
+	tel := telemetry.Telemetry{
 		DeviceID:    "esp32-01",
 		Timestamp:   26694,
 		Temperature: 24.5,

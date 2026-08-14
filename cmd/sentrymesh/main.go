@@ -10,75 +10,68 @@ import (
 
 	"github.com/charmbracelet/log"
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+
+	"github.com/RStephanH/sentrymesh-gateway/internal/security"
+	"github.com/RStephanH/sentrymesh-gateway/internal/storage"
+	"github.com/RStephanH/sentrymesh-gateway/internal/telemetry"
 )
 
-// Telemetry matches the JSON payload published by the ESP32 firmware.
-type Telemetry struct {
-	DeviceID    string  `json:"device_id"`
-	Timestamp   int64   `json:"timestamp"`
-	Temperature float64 `json:"temperature"`
-	Humidity    float64 `json:"humidity"`
-}
-
 const (
-	brokerAddr     = "tcp://localhost:1883"
-	topic          = "sentrymesh/esp32-01/telemetry"
-	ClientID       = "sentrymesh-gateway"
-	rateWindow     = 5 * time.Second
-	rateMaxMessage = 3
+	brokerAddr      = "tcp://localhost:1883"
+	topic           = "sentrymesh/esp32-01/telemetry"
+	clientID        = "sentrymesh-gateway"
+	rateWindow      = 5 * time.Second
+	rateMaxMessages = 3
 
 	floodWindow      = 5 * time.Second
 	floodMaxMessages = 10
+
+	dbPath = "sentrymesh.db"
 )
 
 func main() {
 	logger := log.New(os.Stderr)
-	validator := NewRangeValidator()
-	replayDetector := NewReplayDetector()
-	opsLimiter := NewSlidingWindowLimiter(rateWindow, rateMaxMessage)
-	floodDetector := NewSlidingWindowLimiter(floodWindow, floodMaxMessages)
+	validator := security.NewRangeValidator()
+	replayDetector := security.NewReplayDetector()
+	opsLimiter := security.NewSlidingWindowLimiter(rateWindow, rateMaxMessages)
+	floodDetector := security.NewSlidingWindowLimiter(floodWindow, floodMaxMessages)
 
-	store, err := NewStore("sentrymesh.db")
+	store, err := storage.NewStore(dbPath)
 	if err != nil {
-		logger.Fatal("fatal to open store", "error", err)
+		logger.Fatal("failed to open store", "err", err)
 	}
 	defer store.Close()
 
 	opts := mqtt.NewClientOptions().
 		AddBroker(brokerAddr).
-		SetClientID(ClientID)
+		SetClientID(clientID)
 
 	client := mqtt.NewClient(opts)
 	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		logger.Fatal("failed to connect to broker", "error", token.Error())
+		logger.Fatal("failed to connect to broker", "err", token.Error())
 	}
 	logger.Info("connected to broker", "broker", brokerAddr)
 
 	handler := func(c mqtt.Client, msg mqtt.Message) {
-		var t Telemetry
+		var t telemetry.Telemetry
 		if err := json.Unmarshal(msg.Payload(), &t); err != nil {
-			logger.Error(
-				"failed to parse telemetry payload", "error", err,
-				"raw", string(msg.Payload()),
-			)
+			logger.Error("failed to parse telemetry payload",
+				"err", err, "raw", string(msg.Payload()))
 			return
 		}
 
 		if err := validator.Validate(t); err != nil {
 			logger.Warn("telemetry rejected: invalid payload",
-				"device_id", t.DeviceID, "error", err)
+				"device_id", t.DeviceID, "err", err)
 			if saveErr := store.SaveAlert(t.DeviceID, "invalid_payload", err.Error()); saveErr != nil {
-				logger.Error("failed to save alert", "error", err)
+				logger.Error("failed to save alert", "err", saveErr)
 			}
 			return
 		}
 
 		if !replayDetector.Check(t.DeviceID, t.Timestamp) {
-			logger.Error(
-				"REPLAY ATTACK DETECTED",
-				"device_id", t.DeviceID,
-				"timestamp", t.Timestamp,
-			)
+			logger.Error("REPLAY ATTACK DETECTED",
+				"device_id", t.DeviceID, "timestamp", t.Timestamp)
 			if saveErr := store.SaveAlert(t.DeviceID, "replay",
 				fmt.Sprintf("timestamp=%d", t.Timestamp)); saveErr != nil {
 				logger.Error("failed to save alert", "err", saveErr)
@@ -86,18 +79,15 @@ func main() {
 			return
 		}
 
-		if allowed, floodDetected := checkRateLimits(opsLimiter, floodDetector, t.DeviceID); !allowed {
+		if allowed, floodDetected := security.CheckRateLimits(opsLimiter, floodDetector, t.DeviceID); !allowed {
 			logger.Warn("telemetry rejected: rate limit exceeded", "device_id", t.DeviceID)
 			if saveErr := store.SaveAlert(t.DeviceID, "rate_limit", ""); saveErr != nil {
 				logger.Error("failed to save alert", "err", saveErr)
 			}
 			if floodDetected {
-				logger.Error(
-					"FLOOD ATTACK DETECTED",
+				logger.Error("FLOOD ATTACK DETECTED",
 					"device_id", t.DeviceID,
-					"window", floodWindow,
-					"threshold", floodMaxMessages,
-				)
+					"window", floodWindow, "threshold", floodMaxMessages)
 				if saveErr := store.SaveAlert(t.DeviceID, "flood",
 					fmt.Sprintf("window=%s threshold=%d", floodWindow, floodMaxMessages)); saveErr != nil {
 					logger.Error("failed to save alert", "err", saveErr)
@@ -106,25 +96,19 @@ func main() {
 			return
 		}
 
-		logger.Info(
-			"telemetry received",
-			"device_id", t.DeviceID,
-			"timestamp", t.Timestamp,
-			"temperature", t.Temperature,
-			"humidity", t.Humidity,
-		)
+		logger.Info("telemetry received",
+			"device_id", t.DeviceID, "timestamp", t.Timestamp,
+			"temperature", t.Temperature, "humidity", t.Humidity)
 		if saveErr := store.SaveTelemetry(t); saveErr != nil {
 			logger.Error("failed to save telemetry", "err", saveErr)
 		}
 	}
 
 	if token := client.Subscribe(topic, 1, handler); token.Wait() && token.Error() != nil {
-		logger.Fatal("failed to subscribe", "error", token.Error())
+		logger.Fatal("failed to subscribe", "err", token.Error())
 	}
+	logger.Info("subscribed", "topic", topic)
 
-	logger.Info("subscribe", "topic", topic)
-
-	// Keep the process alive until interrupted.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	<-sig

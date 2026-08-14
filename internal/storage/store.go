@@ -1,9 +1,10 @@
-package main
+package storage
 
 import (
 	"database/sql"
 	"fmt"
 
+	"github.com/RStephanH/sentrymesh-gateway/internal/telemetry"
 	_ "modernc.org/sqlite" // driver registration via side-effect import
 )
 
@@ -45,7 +46,7 @@ CREATE TABLE IF NOT EXISTS alerts (
 );
 `
 
-func (s *Store) SaveTelemetry(t Telemetry) error {
+func (s *Store) SaveTelemetry(t telemetry.Telemetry) error {
 	_, err := s.db.Exec(
 		`INSERT INTO telemetry (device_id, timestamp, temperature, humidity)
 		 VALUES (?, ?, ?, ?)`,

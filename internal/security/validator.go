@@ -1,9 +1,13 @@
-package main
+package security
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/RStephanH/sentrymesh-gateway/internal/telemetry"
+)
 
 type Validator interface {
-	Validate(t Telemetry) error
+	Validate(t telemetry.Telemetry) error
 }
 
 // RangeValidator checks that telemetry fields fall within plausible bounds
@@ -14,7 +18,7 @@ func NewRangeValidator() *RangeValidator {
 	return &RangeValidator{}
 }
 
-func (v *RangeValidator) Validate(t Telemetry) error {
+func (v *RangeValidator) Validate(t telemetry.Telemetry) error {
 	if t.DeviceID == "" {
 		return fmt.Errorf("device_id is empty")
 	}

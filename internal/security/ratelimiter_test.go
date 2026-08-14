@@ -1,4 +1,4 @@
-package main
+package security
 
 import (
 	"testing"
@@ -74,7 +74,7 @@ func TestCheckRateLimits_CascadeToFloodAlert(t *testing.T) {
 
 	// Messages 1-3: under both thresholds.
 	for i := 1; i <= 3; i++ {
-		allowed, floodDetected := checkRateLimits(ops, flood, "esp32-01")
+		allowed, floodDetected := CheckRateLimits(ops, flood, "esp32-01")
 		if !allowed {
 			t.Fatalf("message %d: expected allowed=true", i)
 		}
@@ -86,7 +86,7 @@ func TestCheckRateLimits_CascadeToFloodAlert(t *testing.T) {
 	// Messages 4-10: ops rejects (>3), but flood's own count (4..10)
 	// hasn't yet reached its threshold of 10 — no flood alert yet.
 	for i := 4; i <= 10; i++ {
-		allowed, floodDetected := checkRateLimits(ops, flood, "esp32-01")
+		allowed, floodDetected := CheckRateLimits(ops, flood, "esp32-01")
 		if allowed {
 			t.Fatalf("message %d: expected allowed=false (ops threshold breached)", i)
 		}
@@ -97,7 +97,7 @@ func TestCheckRateLimits_CascadeToFloodAlert(t *testing.T) {
 
 	// Message 11: flood's count has now reached 10 on the PREVIOUS call,
 	// so this 11th call is the first one flood itself rejects too.
-	allowed, floodDetected := checkRateLimits(ops, flood, "esp32-01")
+	allowed, floodDetected := CheckRateLimits(ops, flood, "esp32-01")
 	if allowed {
 		t.Fatal("message 11: expected allowed=false")
 	}
