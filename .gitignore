@@ -13,3 +13,5 @@ firmware/**/build/
 # Python (attacker)
 attacker/.venv/
 attacker/__pycache__/
+
+*.db
