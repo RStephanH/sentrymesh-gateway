@@ -15,3 +15,4 @@ attacker/.venv/
 attacker/__pycache__/
 
 *.db
+*.log
