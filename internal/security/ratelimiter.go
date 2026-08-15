@@ -1,4 +1,4 @@
-package main
+package security
 
 import (
 	"sync"
@@ -52,7 +52,7 @@ func (l *SlidingWindowLimiter) Allow(deviceID string) bool {
 	return true
 }
 
-// checkRateLimits evaluates a device's message against both the operational
+// CheckRateLimits evaluates a device's message against both the operational
 // rate limiter and the flood detector. The flood detector always sees the
 // message (to reflect true throughput), regardless of the ops limiter's
 // decision — see main.go for why this order matters.
@@ -60,7 +60,7 @@ func (l *SlidingWindowLimiter) Allow(deviceID string) bool {
 // allowed reports whether normal processing should continue.
 // floodDetected reports whether the message also breached the (more
 // permissive) flood threshold — a distinct, higher-severity signal.
-func checkRateLimits(ops, flood RateLimiter, deviceID string) (allowed, floodDetected bool) {
+func CheckRateLimits(ops, flood RateLimiter, deviceID string) (allowed, floodDetected bool) {
 	floodOK := flood.Allow(deviceID)
 	opsOK := ops.Allow(deviceID)
 
