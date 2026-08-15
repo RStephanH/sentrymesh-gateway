@@ -7,7 +7,7 @@ a live terminal dashboard.
 
 ## Demo
 
-[![asciicast](https://asciinema.org/a/93OynRwvCzUNsTbW.svg)](https://asciinema.org/a/93OynRwvCzUNsTbW)
+![SentryMesh demo](docs/demo.gif)
 
 The recording shows: legitimate telemetry accepted, an invalid payload
 rejected, a captured message replayed by an attacker script, and a burst
