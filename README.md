@@ -73,6 +73,9 @@ launching the Wokwi simulation. The gateway itself always connects
 directly to `tcp://localhost:1883`, since it runs on the same machine
 as the broker.
 
+> Note: if you use Pinggy here, please check the actual tunnel command
+> output — this line is only a substitute for the real command.
+
 > Known limitation: the free Pinggy tunnel introduces variable latency
 > and disconnects after a few minutes of use — this is expected, not a
 > bug. `mqttClient.setKeepAlive(60)` in the firmware helps but doesn't
